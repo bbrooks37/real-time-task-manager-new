@@ -1,0 +1,12 @@
+# Node modules
+client/node_modules/
+server/node_modules/
+
+# Build outputs
+client/dist/
+
+# Environment variables
+.env
+client/.env.development
+client/.env.production
+server/.env # If you have a .env in server/

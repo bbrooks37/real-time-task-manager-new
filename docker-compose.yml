@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16-alpine # Use a specific version of PostgreSQL for ARM
+    container_name: task_manager_db
+    # Use a volume to persist data even if the container is removed
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: patpa # Corrected DB_USER to patpa
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432" # Only expose if you need to access from outside the docker network for debugging
+
+  backend:
+    build:
+      context: ./server # Build context is now the server directory
+      dockerfile: Dockerfile # Dockerfile is named Dockerfile within that context
+    container_name: task_manager_backend
+    ports:
+      - "5000:5000" # Map host port 5000 to container port 5000
+    environment:
+      DB_HOST: db # Service name 'db' within the Docker network
+      DB_USER: patpa # Corrected DB_USER to patpa
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_PORT: 5432
+      # Add any other environment variables your backend needs (e.g., JWT secret)
+    depends_on:
+      - db # Ensure db starts before backend
+    # volumes:
+    #   - ./server:/app/server # Optional: for development, to auto-reload on code changes
+
+volumes:
+  db_data: # Define the named volume for database persistence

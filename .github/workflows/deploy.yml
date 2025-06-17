@@ -1,0 +1,67 @@
+# .github/workflows/deploy.yml
+name: Deploy to Raspberry Pi
+
+on:
+  push:
+    branches:
+      - main # Trigger on pushes to the main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest # GitHub-hosted runner for the CI/CD job
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # Match your Node.js version
+
+      - name: Install pnpm globally (for building)
+        run: npm install -g pnpm
+
+      - name: Install frontend dependencies and build
+        run: |
+          cd client
+          pnpm install --frozen-lockfile
+          pnpm run build
+        # The output is expected in client/public based on your webpack.config.js
+
+      - name: Set up SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add Raspberry Pi to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan my-task-manager-pi.duckdns.org >> ~/.ssh/known_hosts # Replace with your DuckDNS domain
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Copy frontend files to Raspberry Pi
+        run: |
+          scp -r client/public/* lightsout@my-task-manager-pi.duckdns.org:/var/www/task_manager/frontend/ # Copy compiled frontend assets
+
+      - name: Deploy Docker services on Raspberry Pi
+        uses: appleboy/ssh-action@master
+        with:
+          host: my-task-manager-pi.duckdns.org # Your DuckDNS domain
+          username: lightsout # Your SSH username on the Pi
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /home/lightsout/duckdns/real-time-task-manager-new # Navigate to your project root on the Pi
+            # Copy .env file securely to the app directory on the Pi
+            # This is a critical step for your backend environment variables
+            echo "DB_NAME=${{ secrets.DB_NAME }}" > .env
+            echo "DB_USER=${{ secrets.DB_USER }}" >> .env
+            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
+            # Add any other required environment variables here as GitHub Secrets
+
+            # Pull images (if using remote registry) and restart containers
+            docker compose pull # Use if you push your images to Docker Hub/GHCR
+            docker compose up --build --force-recreate -d # Build and recreate containers
+            docker system prune -f # Clean up old Docker images/containers
+            sudo systemctl reload nginx # Reload Nginx to pick up new frontend files
